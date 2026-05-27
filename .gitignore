@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+image-3d-navigator/node_modules/
+
+# Production builds
+dist/
+image-3d-navigator/dist/
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local automation/cache folders
+.sixth/
+
+# Temporary generated files
+*.tmp
+*.temp
+
+# Legacy root prototype; the active app is image-3d-navigator/
+/index.html
+/main.js
+/image-3d-navigator/build
+/image-3d-navigator/lint

@@ -1,0 +1,15 @@
+{
+  "name": "geracao-3d-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "setup": "npm --prefix image-3d-navigator install",
+    "dev": "npm --prefix image-3d-navigator run dev",
+    "dev:local": "npm --prefix image-3d-navigator run dev -- --host 127.0.0.1 --port 5173",
+    "build": "npm --prefix image-3d-navigator run build",
+    "lint": "npm --prefix image-3d-navigator run lint",
+    "preview": "npm --prefix image-3d-navigator run preview",
+    "typecheck": "npm --prefix image-3d-navigator run typecheck",
+    "check": "npm run typecheck && npm run lint && npm run build"
+  }
+}
