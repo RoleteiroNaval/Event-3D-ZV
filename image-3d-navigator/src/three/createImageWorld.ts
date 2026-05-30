@@ -38,9 +38,11 @@ const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
+  // Use a 1x1 canvas to get the average color of a region using browser-native interpolation.
+  // This is significantly faster than manual pixel looping and reduces memory allocation.
   const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
+  canvas.width = 1;
+  canvas.height = 1;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   if (!ctx) return new THREE.Color(0x111111);
@@ -53,36 +55,14 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
+  const data = ctx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
-const depthAt = (
-  pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-  u: number,
-  v: number
-) => {
-  const x = Math.max(0, Math.min(width - 1, Math.floor(u * (width - 1))));
-  const y = Math.max(0, Math.min(height - 1, Math.floor(v * (height - 1))));
-  return pixels[(y * width + x) * 4] / 255;
-};
 
 const createDepthMesh = (
   image: HTMLImageElement,
@@ -98,15 +78,22 @@ const createDepthMesh = (
   const positions = geometry.attributes.position;
   const depthPixels = depthData.data;
 
+  const posArray = positions.array as Float32Array;
+  const uvArray = geometry.attributes.uv.array as Float32Array;
+  const { width: dw, height: dh } = depthData;
+
   for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
-    const u = x / worldWidth + 0.5;
-    const v = 1 - (y / worldHeight + 0.5);
-    const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
+    // Direct attribute access and inlined depth lookup to eliminate thousands of function calls.
+    const u = uvArray[i * 2];
+    const v = uvArray[i * 2 + 1];
+
+    const dx = Math.max(0, Math.min(dw - 1, Math.floor(u * (dw - 1))));
+    const dy = Math.max(0, Math.min(dh - 1, Math.floor((1 - v) * (dh - 1))));
+    const depth = depthPixels[(dy * dw + dx) * 4] / 255;
+
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+    posArray[i * 3 + 2] = -centeredDepth * options.depthScale * edgeFade;
   }
 
   positions.needsUpdate = true;
