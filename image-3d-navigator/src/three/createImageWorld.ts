@@ -39,12 +39,14 @@ const sampleAverageColor = (
   region: { x: number; y: number; width: number; height: number }
 ) => {
   const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
+  canvas.width = 1;
+  canvas.height = 1;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   if (!ctx) return new THREE.Color(0x111111);
 
+  // Optimization: Use 1x1 drawImage to leverage hardware-accelerated interpolation (averaging)
+  // instead of manual pixel-by-pixel looping.
   ctx.drawImage(
     image,
     region.x,
@@ -53,23 +55,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
+  const data = ctx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const depthAt = (
@@ -96,17 +87,23 @@ const createDepthMesh = (
   const segments = segmentMap[options.quality];
   const geometry = new THREE.PlaneGeometry(worldWidth, worldHeight, segments, segments);
   const positions = geometry.attributes.position;
+  const posArray = positions.array as Float32Array;
   const depthPixels = depthData.data;
 
+  // Optimization: Access TypedArray directly to avoid thousands of getX/getY/setZ function calls
+  // in the vertex processing hot loop (~65k iterations at high quality).
   for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
+    const idx = i * 3;
+    const x = posArray[idx];
+    const y = posArray[idx + 1];
+
     const u = x / worldWidth + 0.5;
     const v = 1 - (y / worldHeight + 0.5);
     const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+
+    posArray[idx + 2] = -centeredDepth * options.depthScale * edgeFade;
   }
 
   positions.needsUpdate = true;
