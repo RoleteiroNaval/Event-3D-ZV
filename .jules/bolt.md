@@ -1,0 +1,3 @@
+## 2025-05-15 - [Interpolation-based Averaging and direct TypedArray access]
+**Learning:** Using a 1x1 canvas with `drawImage` leverages hardware-accelerated interpolation for color averaging, which is orders of magnitude faster than manual pixel looping on the CPU. Reusing the canvas context further reduces GC pressure. In Three.js, direct access to `BufferAttribute.array` as a TypedArray in hot loops eliminates significant function call overhead from `.getX()`/`.setZ()`.
+**Action:** Always prefer 1x1 canvas for region averaging and direct TypedArray access for vertex processing in performance-critical paths.
