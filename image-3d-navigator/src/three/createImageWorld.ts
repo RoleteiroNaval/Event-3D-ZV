@@ -36,16 +36,24 @@ const segmentMap: Record<MeshQuality, number> = {
 
 const sampleAverageColor = (
   image: HTMLImageElement,
-  region: { x: number; y: number; width: number; height: number }
+  region: { x: number; y: number; width: number; height: number },
+  ctx?: CanvasRenderingContext2D | null
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  // Performance: Using a 1x1 canvas with drawImage allows the browser's hardware-accelerated
+  // interpolation to handle the averaging, which is much faster than manual pixel looping.
+  const targetCtx = ctx || document.createElement('canvas').getContext('2d', { willReadFrequently: true });
 
-  if (!ctx) return new THREE.Color(0x111111);
+  if (!targetCtx) return new THREE.Color(0x111111);
 
-  ctx.drawImage(
+  const canvas = targetCtx.canvas;
+  const oldWidth = canvas.width;
+  const oldHeight = canvas.height;
+
+  // Set to 1x1 if it's the internal one or if we want to force the optimization
+  canvas.width = 1;
+  canvas.height = 1;
+
+  targetCtx.drawImage(
     image,
     region.x,
     region.y,
@@ -53,23 +61,19 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
+  const data = targetCtx.getImageData(0, 0, 1, 1).data;
 
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
+  // Restore if it was shared
+  if (ctx) {
+    canvas.width = oldWidth;
+    canvas.height = oldHeight;
   }
 
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const depthAt = (
@@ -96,17 +100,21 @@ const createDepthMesh = (
   const segments = segmentMap[options.quality];
   const geometry = new THREE.PlaneGeometry(worldWidth, worldHeight, segments, segments);
   const positions = geometry.attributes.position;
+  const posArray = positions.array as Float32Array;
   const depthPixels = depthData.data;
 
+  // Performance: Directly accessing the TypedArray (posArray) instead of using .getX(), .getY(), .setZ()
+  // eliminates function call overhead in this hot loop, which can run thousands of times.
   for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
+    const i3 = i * 3;
+    const x = posArray[i3];
+    const y = posArray[i3 + 1];
     const u = x / worldWidth + 0.5;
     const v = 1 - (y / worldHeight + 0.5);
     const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+    posArray[i3 + 2] = -centeredDepth * options.depthScale * edgeFade;
   }
 
   positions.needsUpdate = true;
@@ -133,24 +141,30 @@ const addRoomShell = (
   worldWidth: number,
   worldHeight: number
 ) => {
+  // Performance: Reusing a single 1x1 canvas for multiple sampling calls to reduce GC pressure.
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
   const floorColor = sampleAverageColor(image, {
     x: 0,
     y: image.naturalHeight * 0.72,
     width: image.naturalWidth,
     height: image.naturalHeight * 0.28,
-  }).multiplyScalar(0.42);
+  }, ctx).multiplyScalar(0.42);
   const ceilingColor = sampleAverageColor(image, {
     x: 0,
     y: 0,
     width: image.naturalWidth,
     height: image.naturalHeight * 0.22,
-  }).multiplyScalar(0.34);
+  }, ctx).multiplyScalar(0.34);
   const sideColor = sampleAverageColor(image, {
     x: 0,
     y: image.naturalHeight * 0.2,
     width: image.naturalWidth,
     height: image.naturalHeight * 0.6,
-  }).multiplyScalar(0.28);
+  }, ctx).multiplyScalar(0.28);
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(72, 72),
