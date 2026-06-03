@@ -34,17 +34,24 @@ const segmentMap: Record<MeshQuality, number> = {
   high: 256,
 };
 
+// Reusable 1x1 canvas for hardware-accelerated color averaging
+const sharedCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+if (sharedCanvas) {
+  sharedCanvas.width = 1;
+  sharedCanvas.height = 1;
+}
+
 const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!sharedCanvas) return new THREE.Color(0x111111);
+  const ctx = sharedCanvas.getContext('2d', { willReadFrequently: true });
 
   if (!ctx) return new THREE.Color(0x111111);
 
+  // Performance optimization: Using 1x1 canvas and drawImage to leverage hardware-accelerated interpolation
+  // for averaging color regions instead of manual pixel-by-pixel looping.
   ctx.drawImage(
     image,
     region.x,
@@ -53,23 +60,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
+  const data = ctx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const depthAt = (
@@ -98,15 +94,18 @@ const createDepthMesh = (
   const positions = geometry.attributes.position;
   const depthPixels = depthData.data;
 
-  for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
+  // Performance optimization: Access BufferAttribute.array directly as a TypedArray
+  // to eliminate function call overhead from .getX(), .getY(), or .setZ() in hot loops.
+  const posArray = positions.array as Float32Array;
+  for (let i = 0; i < posArray.length; i += 3) {
+    const x = posArray[i];
+    const y = posArray[i + 1];
     const u = x / worldWidth + 0.5;
     const v = 1 - (y / worldHeight + 0.5);
     const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+    posArray[i + 2] = -centeredDepth * options.depthScale * edgeFade;
   }
 
   positions.needsUpdate = true;
