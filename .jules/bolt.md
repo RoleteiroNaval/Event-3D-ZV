@@ -1,0 +1,3 @@
+## 2025-05-22 - Hardware-accelerated color averaging and vertex loop inlining
+**Learning:** Manual pixel-by-pixel loops for color averaging in JavaScript are significantly slower than drawing to a 1x1 canvas, which leverages the browser's hardware-accelerated interpolation. Additionally, Three.js `BufferAttribute` getter/setter methods (`getX`, `getY`, `setZ`) introduce substantial function call overhead in high-iteration vertex processing loops (~260k calls for a 256x256 mesh).
+**Action:** Always prefer 1x1 canvas `drawImage` for region color averaging and direct `TypedArray` access (e.g., `positions.array`) with inlined sampling logic in performance-critical Three.js loops.
