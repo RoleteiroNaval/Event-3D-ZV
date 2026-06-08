@@ -1,0 +1,3 @@
+## 2025-05-14 - Hardware-Accelerated Regional Color Averaging
+**Learning:** Manual pixel looping in JavaScript for regional color averaging (e.g., sampleAverageColor) is a major bottleneck due to GC pressure (new canvas/ImageData creation) and O(N) iteration. Browser-native 'drawImage' with a 1x1 target canvas leverages hardware interpolation (typically bilinear or bicubic) to compute the average color in a single, highly-optimized operation.
+**Action:** Always prefer 1x1 canvas 'drawImage' for regional sampling. When using a shared singleton canvas, set 'globalCompositeOperation = "copy"' to ensure clean overwrites without 'clearRect' overhead or transparency blending issues.
