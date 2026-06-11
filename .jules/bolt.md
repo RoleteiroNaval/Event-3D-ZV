@@ -1,0 +1,3 @@
+## 2025-05-15 - Optimize Regional Color Sampling with 1x1 Singleton Canvas
+**Learning:** Regional color sampling using `getImageData` on a 48x48 canvas with manual pixel iteration in JavaScript was causing visible GPU stalls and GC pressure. Using a 1x1 singleton canvas and letting `drawImage` handle the downsampling through hardware-accelerated interpolation is significantly faster and avoids frequent canvas allocations.
+**Action:** Use the "1x1 canvas downsampling" pattern whenever regional color averaging is needed from an image or another canvas. Ensure `globalCompositeOperation` is set to `copy` when using a singleton canvas to avoid clearing overhead.
