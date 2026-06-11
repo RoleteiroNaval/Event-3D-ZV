@@ -34,18 +34,29 @@ const segmentMap: Record<MeshQuality, number> = {
   high: 256,
 };
 
+// Singleton canvas for regional color sampling to avoid GC pressure and GPU stalls.
+// Using a 1x1 size leverages hardware-accelerated interpolation (linear filtering)
+// for averaging the source region into a single pixel.
+let samplingCanvas: HTMLCanvasElement | null = null;
+let samplingContext: CanvasRenderingContext2D | null = null;
+
 const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!samplingCanvas) {
+    samplingCanvas = document.createElement('canvas');
+    samplingCanvas.width = 1;
+    samplingCanvas.height = 1;
+    samplingContext = samplingCanvas.getContext('2d', { willReadFrequently: true });
+  }
 
-  if (!ctx) return new THREE.Color(0x111111);
+  if (!samplingContext) return new THREE.Color(0x111111);
 
-  ctx.drawImage(
+  // Use 'copy' to ensure we replace previous pixels without clearing or blending.
+  samplingContext.globalCompositeOperation = 'copy';
+
+  samplingContext.drawImage(
     image,
     region.x,
     region.y,
@@ -53,23 +64,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
+  const data = samplingContext.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const depthAt = (
