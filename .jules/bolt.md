@@ -1,0 +1,3 @@
+## 2026-06-12 - Hardware-accelerated color sampling
+**Learning:** Manual pixel-by-pixel looping for regional color averaging in JS is significantly slower than leveraging the browser's native `drawImage` interpolation. Using a 1x1 destination canvas effectively offloads the averaging work to the GPU or highly optimized browser routines. Additionally, using a singleton canvas avoids garbage collection pressure during world generation.
+**Action:** Always prefer 1x1 canvas `drawImage` for regional sampling over manual pixel loops. Use `globalCompositeOperation = 'copy'` to ensure clean replacement without blending overhead.
