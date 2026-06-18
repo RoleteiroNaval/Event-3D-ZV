@@ -1,0 +1,3 @@
+## 2026-06-18 - Mesh Generation and Color Sampling Optimization
+**Learning:** Accessing `BufferAttribute.array` as a TypedArray and inlining utility functions in Three.js hot loops significantly reduces function call overhead. Additionally, using a 1x1 singleton canvas with `globalCompositeOperation = 'copy'` and hardware-accelerated `drawImage` for regional color averaging eliminates manual pixel loops and reduces GC pressure.
+**Action:** Always prefer direct TypedArray access for vertex manipulation in Three.js and use singleton canvases for repetitive image processing tasks to maintain high performance in rendering-heavy paths.
