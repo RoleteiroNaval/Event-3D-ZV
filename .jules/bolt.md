@@ -1,0 +1,3 @@
+## 2026-06-20 - Three.js Vertex Loop Optimization
+**Learning:** In Three.js hot loops (e.g., vertex processing for depth meshes), using high-level methods like `BufferAttribute.getX()` and `.setZ()` introduces significant function call overhead. Additionally, calling small helper functions like `depthAt` thousands of times adds stack overhead that can be avoided.
+**Action:** Access `BufferAttribute.array` directly as a `TypedArray` (e.g., `Float32Array`) and inline small, performance-critical sampling logic into the loop. This can nearly double the performance of mesh generation in high-quality modes.
