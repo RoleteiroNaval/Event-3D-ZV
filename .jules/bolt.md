@@ -1,0 +1,3 @@
+## 2026-06-21 - Singleton 1x1 Canvas for Regional Color Averaging
+**Learning:** Manual pixel-by-pixel looping over a 48x48 canvas (2304 iterations) to find the average color is significantly slower than using hardware-accelerated interpolation. Creating new canvas elements repeatedly also increases GC pressure.
+**Action:** Use a 1x1 singleton canvas with `drawImage` and `globalCompositeOperation = 'copy'`. Drawing the source region into a 1x1 target forces the GPU/browser to interpolate and average all source pixels into that single pixel, providing a high-performance color sample in O(1) operations from the CPU's perspective.
