@@ -34,17 +34,25 @@ const segmentMap: Record<MeshQuality, number> = {
   high: 256,
 };
 
+// Bolt: Use a singleton 1x1 canvas for hardware-accelerated regional color averaging.
+// This replaces manual pixel loops (48x48 = 2304 iterations) with browser-native interpolation.
+const sharedCanvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+if (sharedCanvas) {
+  sharedCanvas.width = 1;
+  sharedCanvas.height = 1;
+}
+
 const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!sharedCanvas) return new THREE.Color(0x111111);
+  const ctx = sharedCanvas.getContext('2d', { willReadFrequently: true });
 
   if (!ctx) return new THREE.Color(0x111111);
 
+  // Bolt: Using 'copy' composite operation ensures we overwrite the 1x1 pixel without clearRect overhead.
+  ctx.globalCompositeOperation = 'copy';
   ctx.drawImage(
     image,
     region.x,
@@ -53,35 +61,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
-};
-
-const depthAt = (
-  pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-  u: number,
-  v: number
-) => {
-  const x = Math.max(0, Math.min(width - 1, Math.floor(u * (width - 1))));
-  const y = Math.max(0, Math.min(height - 1, Math.floor(v * (height - 1))));
-  return pixels[(y * width + x) * 4] / 255;
+  const data = ctx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const createDepthMesh = (
@@ -96,17 +81,30 @@ const createDepthMesh = (
   const segments = segmentMap[options.quality];
   const geometry = new THREE.PlaneGeometry(worldWidth, worldHeight, segments, segments);
   const positions = geometry.attributes.position;
+  const posArray = positions.array as Float32Array;
   const depthPixels = depthData.data;
+  const dw = depthData.width;
+  const dh = depthData.height;
 
-  for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
-    const u = x / worldWidth + 0.5;
-    const v = 1 - (y / worldHeight + 0.5);
-    const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
+  // Bolt: Optimized vertex processing loop (~66k iterations for 'high' quality).
+  // 1. Direct TypedArray access to avoid Three.js .getX/.setZ method overhead.
+  // 2. Inlined depth sampling logic to eliminate function call overhead.
+  for (let i = 0; i < positions.count; i++) {
+    const idx = i * 3;
+    const px = posArray[idx];
+    const py = posArray[idx + 1];
+
+    const u = px / worldWidth + 0.5;
+    const v = 1 - (py / worldHeight + 0.5);
+
+    // Inlined depthAt
+    const dx = Math.max(0, Math.min(dw - 1, Math.floor(u * (dw - 1))));
+    const dy = Math.max(0, Math.min(dh - 1, Math.floor(v * (dh - 1))));
+    const depth = depthPixels[(dy * dw + dx) * 4] / 255;
+
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+    posArray[idx + 2] = -centeredDepth * options.depthScale * edgeFade;
   }
 
   positions.needsUpdate = true;
