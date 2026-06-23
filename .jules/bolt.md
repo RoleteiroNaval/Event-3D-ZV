@@ -1,0 +1,3 @@
+## 2026-06-23 - Hardware-accelerated color averaging and TypedArray hot loop optimization
+**Learning:** Manual pixel-by-pixel loops for regional color averaging (48x48) can be replaced by a 1x1 canvas `drawImage` call, leveraging the browser's hardware-accelerated interpolation for a ~2300x reduction in iterations. Additionally, direct TypedArray access in Three.js geometry loops (65k+ iterations) significantly outperforms high-level `.getX()`/`.setZ()` methods.
+**Action:** Use 1x1 singleton canvases for color sampling and prioritize direct BufferAttribute.array access in high-iteration vertex loops.
