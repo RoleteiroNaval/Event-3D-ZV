@@ -72,18 +72,6 @@ const sampleAverageColor = (
   return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
 };
 
-const depthAt = (
-  pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-  u: number,
-  v: number
-) => {
-  const x = Math.max(0, Math.min(width - 1, Math.floor(u * (width - 1))));
-  const y = Math.max(0, Math.min(height - 1, Math.floor(v * (height - 1))));
-  return pixels[(y * width + x) * 4] / 255;
-};
-
 const createDepthMesh = (
   image: HTMLImageElement,
   depthData: ImageData,
@@ -96,17 +84,30 @@ const createDepthMesh = (
   const segments = segmentMap[options.quality];
   const geometry = new THREE.PlaneGeometry(worldWidth, worldHeight, segments, segments);
   const positions = geometry.attributes.position;
+  const posArray = positions.array as Float32Array;
   const depthPixels = depthData.data;
+  const dw = depthData.width;
+  const dh = depthData.height;
+  const dwM1 = dw - 1;
+  const dhM1 = dh - 1;
 
-  for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
-    const u = x / worldWidth + 0.5;
-    const v = 1 - (y / worldHeight + 0.5);
-    const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
+  // Optimized loop: Direct TypedArray access and inlined depth sampling.
+  // This eliminates thousands of function calls (getX, getY, setZ, depthAt).
+  for (let i = 0; i < posArray.length; i += 3) {
+    const px = posArray[i];
+    const py = posArray[i + 1];
+
+    const u = px / worldWidth + 0.5;
+    const v = 1 - (py / worldHeight + 0.5);
+
+    // Inlined depthAt logic
+    const dx = Math.max(0, Math.min(dwM1, Math.floor(u * dwM1)));
+    const dy = Math.max(0, Math.min(dhM1, Math.floor(v * dhM1)));
+    const depth = depthPixels[(dy * dw + dx) * 4] / 255;
+
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+    posArray[i + 2] = -centeredDepth * options.depthScale * edgeFade;
   }
 
   positions.needsUpdate = true;
