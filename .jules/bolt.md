@@ -1,0 +1,3 @@
+## 2026-06-29 - [createImageWorld Optimization]
+**Learning:** Significant performance gains were achieved in 3D world generation by combining three patterns: (1) direct TypedArray access on Three.js geometry buffers to avoid function call overhead in large loops, (2) inlining of utility functions (like depthAt) into hot loops to eliminate massive call overhead (~66k calls for high quality), and (3) leveraging a singleton 1x1 canvas with 'drawImage' for hardware-accelerated regional color averaging instead of manual pixel looping.
+**Action:** Always prefer direct TypedArray manipulation and inlining for operations occurring thousands of times per frame or generation. Use the 1x1 canvas 'drawImage' trick for any regional color sampling to offload interpolation to the GPU.
