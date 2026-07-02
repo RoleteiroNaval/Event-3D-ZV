@@ -34,18 +34,21 @@ const segmentMap: Record<MeshQuality, number> = {
   high: 256,
 };
 
+// Performance: Use a singleton 1x1 canvas for regional color averaging to leverage hardware-accelerated interpolation.
+const colorSamplerCanvas = document.createElement('canvas');
+colorSamplerCanvas.width = 1;
+colorSamplerCanvas.height = 1;
+const colorSamplerCtx = colorSamplerCanvas.getContext('2d', { willReadFrequently: true });
+
 const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!colorSamplerCtx) return new THREE.Color(0x111111);
 
-  if (!ctx) return new THREE.Color(0x111111);
-
-  ctx.drawImage(
+  // Performance: Setting 'copy' replaces the single pixel without clearing the canvas.
+  colorSamplerCtx.globalCompositeOperation = 'copy';
+  colorSamplerCtx.drawImage(
     image,
     region.x,
     region.y,
@@ -53,35 +56,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
-};
-
-const depthAt = (
-  pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-  u: number,
-  v: number
-) => {
-  const x = Math.max(0, Math.min(width - 1, Math.floor(u * (width - 1))));
-  const y = Math.max(0, Math.min(height - 1, Math.floor(v * (height - 1))));
-  return pixels[(y * width + x) * 4] / 255;
+  const data = colorSamplerCtx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const createDepthMesh = (
@@ -95,21 +75,29 @@ const createDepthMesh = (
   const worldHeight = worldWidth / aspect;
   const segments = segmentMap[options.quality];
   const geometry = new THREE.PlaneGeometry(worldWidth, worldHeight, segments, segments);
-  const positions = geometry.attributes.position;
-  const depthPixels = depthData.data;
 
-  for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
+  // Performance: Access the Float32Array directly to eliminate ~260,000 function calls (getX/setZ) on high quality.
+  const positions = geometry.attributes.position.array as Float32Array;
+  const depthPixels = depthData.data;
+  const { width: dw, height: dh } = depthData;
+
+  for (let i = 0; i < positions.length; i += 3) {
+    const x = positions[i];
+    const y = positions[i + 1];
     const u = x / worldWidth + 0.5;
     const v = 1 - (y / worldHeight + 0.5);
-    const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
+
+    // Performance: Inlined depth sampling logic.
+    const dx = Math.max(0, Math.min(dw - 1, Math.floor(u * (dw - 1))));
+    const dy = Math.max(0, Math.min(dh - 1, Math.floor(v * (dh - 1))));
+    const depth = depthPixels[(dy * dw + dx) * 4] / 255;
+
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+    positions[i + 2] = -centeredDepth * options.depthScale * edgeFade;
   }
 
-  positions.needsUpdate = true;
+  geometry.attributes.position.needsUpdate = true;
   geometry.computeVertexNormals();
 
   const material = new THREE.MeshStandardMaterial({
