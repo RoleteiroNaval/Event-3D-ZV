@@ -10,6 +10,11 @@ export const createCollisionSystem = (
   obstacles: THREE.Box3[]
 ): CollisionSystem => ({ bounds, obstacles });
 
+// Reusable objects to avoid per-frame allocations
+const cameraFootprint = new THREE.Box3();
+const footprintMin = new THREE.Vector3();
+const footprintMax = new THREE.Vector3();
+
 export const resolveCameraCollision = (
   camera: THREE.PerspectiveCamera,
   previousPosition: THREE.Vector3,
@@ -19,10 +24,10 @@ export const resolveCameraCollision = (
   camera.position.x = Math.max(-system.bounds.halfWidth + margin, Math.min(system.bounds.halfWidth - margin, camera.position.x));
   camera.position.z = Math.max(-system.bounds.halfDepth + margin, Math.min(system.bounds.halfDepth - margin, camera.position.z));
 
-  const cameraFootprint = new THREE.Box3(
-    new THREE.Vector3(camera.position.x - 0.32, 0, camera.position.z - 0.32),
-    new THREE.Vector3(camera.position.x + 0.32, 1.9, camera.position.z + 0.32)
-  );
+  // Update reusable objects to avoid per-frame allocations
+  footprintMin.set(camera.position.x - 0.32, 0, camera.position.z - 0.32);
+  footprintMax.set(camera.position.x + 0.32, 1.9, camera.position.z + 0.32);
+  cameraFootprint.set(footprintMin, footprintMax);
 
   if (system.obstacles.some((box) => box.intersectsBox(cameraFootprint))) {
     camera.position.copy(previousPosition);
