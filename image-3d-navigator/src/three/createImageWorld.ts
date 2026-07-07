@@ -72,18 +72,6 @@ const sampleAverageColor = (
   return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
 };
 
-const depthAt = (
-  pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-  u: number,
-  v: number
-) => {
-  const x = Math.max(0, Math.min(width - 1, Math.floor(u * (width - 1))));
-  const y = Math.max(0, Math.min(height - 1, Math.floor(v * (height - 1))));
-  return pixels[(y * width + x) * 4] / 255;
-};
-
 const createDepthMesh = (
   image: HTMLImageElement,
   depthData: ImageData,
@@ -96,17 +84,29 @@ const createDepthMesh = (
   const segments = segmentMap[options.quality];
   const geometry = new THREE.PlaneGeometry(worldWidth, worldHeight, segments, segments);
   const positions = geometry.attributes.position;
+  const posArray = positions.array as Float32Array;
   const depthPixels = depthData.data;
+  const dw = depthData.width;
+  const dh = depthData.height;
 
+  // Performance optimization: Using direct TypedArray access and inlining sampling logic
+  // to avoid thousands of function calls and .getX/.setZ overhead.
   for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
+    const idx = i * 3;
+    const x = posArray[idx];
+    const y = posArray[idx + 1];
+
     const u = x / worldWidth + 0.5;
     const v = 1 - (y / worldHeight + 0.5);
-    const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
+
+    // Inlined depthAt
+    const dx = Math.max(0, Math.min(dw - 1, Math.floor(u * (dw - 1))));
+    const dy = Math.max(0, Math.min(dh - 1, Math.floor(v * (dh - 1))));
+    const depth = depthPixels[(dy * dw + dx) * 4] / 255;
+
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+    posArray[idx + 2] = -centeredDepth * options.depthScale * edgeFade;
   }
 
   positions.needsUpdate = true;
