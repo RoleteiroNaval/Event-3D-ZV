@@ -134,6 +134,8 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
     const velocity = new THREE.Vector3();
     const direction = new THREE.Vector3();
     const raycaster = new THREE.Raycaster();
+    // Pre-allocated Vector3 to avoid cloning the camera's position on every frame in the animate loop.
+    const cachedPreviousPosition = new THREE.Vector3();
     let prevTime = performance.now();
     let animationFrame = 0;
 
@@ -188,7 +190,9 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
       const delta = Math.min((time - prevTime) / 1000, 0.05);
 
       if (controls.isLocked && renderMode === 'walkthrough') {
-        const previousPosition = camera.position.clone();
+        // Copy the camera position into the pre-allocated cachedPreviousPosition vector
+        // instead of instantiating a new Vector3 via clone() on every frame.
+        cachedPreviousPosition.copy(camera.position);
         const speed = keys.shift ? 48 : 28;
         velocity.x -= velocity.x * 10 * delta;
         velocity.z -= velocity.z * 10 * delta;
@@ -209,7 +213,7 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
         }
 
         if (world.collisionSystem) {
-          resolveCameraCollision(camera, previousPosition, world.collisionSystem);
+          resolveCameraCollision(camera, cachedPreviousPosition, world.collisionSystem);
         }
       }
 
