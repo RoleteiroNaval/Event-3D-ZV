@@ -134,6 +134,8 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
     const velocity = new THREE.Vector3();
     const direction = new THREE.Vector3();
     const raycaster = new THREE.Raycaster();
+    const downDirection = new THREE.Vector3(0, -1, 0);
+    const cachedPreviousPosition = new THREE.Vector3();
     let prevTime = performance.now();
     let animationFrame = 0;
 
@@ -188,7 +190,8 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
       const delta = Math.min((time - prevTime) / 1000, 0.05);
 
       if (controls.isLocked && renderMode === 'walkthrough') {
-        const previousPosition = camera.position.clone();
+        // Cache previous position using pre-allocated vector to avoid per-frame GC allocations
+        cachedPreviousPosition.copy(camera.position);
         const speed = keys.shift ? 48 : 28;
         velocity.x -= velocity.x * 10 * delta;
         velocity.z -= velocity.z * 10 * delta;
@@ -202,14 +205,15 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
         controls.moveRight(-velocity.x * delta);
         controls.moveForward(-velocity.z * delta);
 
-        raycaster.set(camera.position, new THREE.Vector3(0, -1, 0));
+        // Use pre-allocated downDirection vector to avoid allocation inside hot loop
+        raycaster.set(camera.position, downDirection);
         const hits = raycaster.intersectObject(world.collisionMesh, false);
         if (hits[0]) {
           camera.position.y += (hits[0].point.y + 1.55 - camera.position.y) * 0.14;
         }
 
         if (world.collisionSystem) {
-          resolveCameraCollision(camera, previousPosition, world.collisionSystem);
+          resolveCameraCollision(camera, cachedPreviousPosition, world.collisionSystem);
         }
       }
 
