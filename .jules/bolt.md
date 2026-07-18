@@ -1,0 +1,3 @@
+## 2026-07-18 - Object Pooling in Collision System
+**Learning:** Recreating math objects like `THREE.Box3` and `THREE.Vector3` on every frame inside rendering/animation hot loops creates high heap allocation rates, leading to frequent Garbage Collection (GC) pauses and frame rate stuttering. Pre-allocating singletons and updating them using inline mutators (e.g., `set(...)` directly on sub-properties like `.min` and `.max`) eliminates this overhead.
+**Action:** Always pre-allocate Three.js math structures (like bounding boxes, matrices, vectors) at the module level or component scope when they are processed in high-frequency functions (e.g. `requestAnimationFrame` loops).
