@@ -34,18 +34,35 @@ const segmentMap: Record<MeshQuality, number> = {
   high: 256,
 };
 
+// Singleton canvas & context for hardware-accelerated average color sampling.
+// Lazily initialized to prevent issues with non-browser/SSR/Node environments.
+let sharedCanvas: HTMLCanvasElement | null = null;
+let sharedCtx: CanvasRenderingContext2D | null = null;
+
+/**
+ * Samples the average color of an image region.
+ * Uses a 1x1 canvas to leverage hardware-accelerated linear interpolation/downscaling,
+ * eliminating the need for CPU-bound pixel summing loops and repeated canvas allocation overhead.
+ */
 const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!sharedCanvas) {
+    sharedCanvas = document.createElement('canvas');
+    sharedCanvas.width = 1;
+    sharedCanvas.height = 1;
+    sharedCtx = sharedCanvas.getContext('2d', { willReadFrequently: true });
+    if (sharedCtx) {
+      // Ensure we replace existing pixels on subsequent draws instead of blending,
+      // avoiding clearRect() overhead.
+      sharedCtx.globalCompositeOperation = 'copy';
+    }
+  }
 
-  if (!ctx) return new THREE.Color(0x111111);
+  if (!sharedCtx) return new THREE.Color(0x111111);
 
-  ctx.drawImage(
+  sharedCtx.drawImage(
     image,
     region.x,
     region.y,
@@ -53,23 +70,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
+  const data = sharedCtx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const depthAt = (
