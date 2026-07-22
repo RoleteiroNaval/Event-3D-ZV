@@ -1,0 +1,3 @@
+## 2026-07-22 - [Three.js hot loop allocations and object pooling]
+**Learning:** Creating new `THREE.Vector3` or `THREE.Box3` objects inside active `requestAnimationFrame` loops or frame-by-frame collision systems triggers heavy garbage collection (GC) pressure. In WebGL / Three.js applications, GC pauses can drop frame rates and cause visible stuttering.
+**Action:** Always pre-allocate static math helper objects (like `Box3` or direction `Vector3`s) in outer scopes (e.g. module-level or Hook scope outside loops) and update them in place with `.set()` or `.copy()` instead of calling `new` inside hot loops.
