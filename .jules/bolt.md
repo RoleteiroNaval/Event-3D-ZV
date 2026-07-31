@@ -1,0 +1,3 @@
+## 2026-07-31 - [Object Pooling in Three.js Math Utilities]
+**Learning:** Instantiating temporary math objects (like `THREE.Vector3` or `THREE.Box3`) inside hot loops/animation frames is a common performance bottleneck in WebGL apps. Even though CPU time per instantiation is low, the cumulative allocation pressure triggers frequent Garbage Collection (GC) pauses, causing visible micro-stutters or frame drops, especially on high-refresh-rate displays (120Hz/240Hz).
+**Action:** Always pre-allocate math utility objects at a higher scope (such as module scope or React component reference scope) and reuse them via destructive updates (e.g., `.copy()` or `.set()`) inside the animation loops or update routines.

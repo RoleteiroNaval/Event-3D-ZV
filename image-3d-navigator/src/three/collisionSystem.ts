@@ -10,6 +10,10 @@ export const createCollisionSystem = (
   obstacles: THREE.Box3[]
 ): CollisionSystem => ({ bounds, obstacles });
 
+// Pre-allocate Box3 object to eliminate per-frame allocations during collision resolution,
+// preventing garbage collection (GC) overhead and potential frame drops.
+const cameraFootprint = new THREE.Box3();
+
 export const resolveCameraCollision = (
   camera: THREE.PerspectiveCamera,
   previousPosition: THREE.Vector3,
@@ -19,10 +23,9 @@ export const resolveCameraCollision = (
   camera.position.x = Math.max(-system.bounds.halfWidth + margin, Math.min(system.bounds.halfWidth - margin, camera.position.x));
   camera.position.z = Math.max(-system.bounds.halfDepth + margin, Math.min(system.bounds.halfDepth - margin, camera.position.z));
 
-  const cameraFootprint = new THREE.Box3(
-    new THREE.Vector3(camera.position.x - 0.32, 0, camera.position.z - 0.32),
-    new THREE.Vector3(camera.position.x + 0.32, 1.9, camera.position.z + 0.32)
-  );
+  // Directly set coordinates on the pre-allocated bounding box to avoid instantiating Vector3 and Box3 objects on every update
+  cameraFootprint.min.set(camera.position.x - 0.32, 0, camera.position.z - 0.32);
+  cameraFootprint.max.set(camera.position.x + 0.32, 1.9, camera.position.z + 0.32);
 
   if (system.obstacles.some((box) => box.intersectsBox(cameraFootprint))) {
     camera.position.copy(previousPosition);
