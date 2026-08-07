@@ -137,6 +137,10 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
     let prevTime = performance.now();
     let animationFrame = 0;
 
+    // Pre-allocated math objects to avoid per-frame GC allocations in the animation loop
+    const cachedPreviousPosition = new THREE.Vector3();
+    const downVector = new THREE.Vector3(0, -1, 0);
+
     const resetCamera = () => {
       if (eventMockup && world.eventLayout && renderMode === 'isometric') {
         const maxSide = Math.max(world.eventLayout.venue.width_m, world.eventLayout.venue.depth_m);
@@ -188,7 +192,7 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
       const delta = Math.min((time - prevTime) / 1000, 0.05);
 
       if (controls.isLocked && renderMode === 'walkthrough') {
-        const previousPosition = camera.position.clone();
+        cachedPreviousPosition.copy(camera.position);
         const speed = keys.shift ? 48 : 28;
         velocity.x -= velocity.x * 10 * delta;
         velocity.z -= velocity.z * 10 * delta;
@@ -202,14 +206,14 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
         controls.moveRight(-velocity.x * delta);
         controls.moveForward(-velocity.z * delta);
 
-        raycaster.set(camera.position, new THREE.Vector3(0, -1, 0));
+        raycaster.set(camera.position, downVector);
         const hits = raycaster.intersectObject(world.collisionMesh, false);
         if (hits[0]) {
           camera.position.y += (hits[0].point.y + 1.55 - camera.position.y) * 0.14;
         }
 
         if (world.collisionSystem) {
-          resolveCameraCollision(camera, previousPosition, world.collisionSystem);
+          resolveCameraCollision(camera, cachedPreviousPosition, world.collisionSystem);
         }
       }
 
