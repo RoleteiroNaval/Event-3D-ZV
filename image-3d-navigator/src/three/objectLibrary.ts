@@ -2,6 +2,19 @@ import * as THREE from 'three';
 import type { Object3D, Zone } from '../types/event';
 
 const materialCache = new Map<string, THREE.Material>();
+const geometryCache = new Map<string, THREE.BufferGeometry>();
+
+export const clearLibraryCache = () => {
+  materialCache.forEach((material) => {
+    material.dispose();
+  });
+  materialCache.clear();
+
+  geometryCache.forEach((geometry) => {
+    geometry.dispose();
+  });
+  geometryCache.clear();
+};
 
 export const mat = (color: string, options: { roughness?: number; metalness?: number; opacity?: number; emissive?: string } = {}) => {
   const key = `${color}-${options.roughness ?? 0.8}-${options.metalness ?? 0}-${options.opacity ?? 1}-${options.emissive ?? 'none'}`;
@@ -17,19 +30,53 @@ export const mat = (color: string, options: { roughness?: number; metalness?: nu
     emissive: options.emissive ? new THREE.Color(options.emissive) : new THREE.Color(0x000000),
     emissiveIntensity: options.emissive ? 0.75 : 0,
   });
+  material.userData = { cached: true };
   materialCache.set(key, material);
   return material;
 };
 
+export const getBoxGeometry = (w: number, h: number, d: number): THREE.BoxGeometry => {
+  const key = `box-${w}-${h}-${d}`;
+  let geom = geometryCache.get(key) as THREE.BoxGeometry;
+  if (!geom) {
+    geom = new THREE.BoxGeometry(w, h, d);
+    geom.userData = { cached: true };
+    geometryCache.set(key, geom);
+  }
+  return geom;
+};
+
+export const getCylinderGeometry = (rt: number, rb: number, h: number, radialSegments: number): THREE.CylinderGeometry => {
+  const key = `cylinder-${rt}-${rb}-${h}-${radialSegments}`;
+  let geom = geometryCache.get(key) as THREE.CylinderGeometry;
+  if (!geom) {
+    geom = new THREE.CylinderGeometry(rt, rb, h, radialSegments);
+    geom.userData = { cached: true };
+    geometryCache.set(key, geom);
+  }
+  return geom;
+};
+
+export const getConeGeometry = (r: number, h: number, radialSegments: number, heightSegments?: number, openEnded?: boolean): THREE.ConeGeometry => {
+  const key = `cone-${r}-${h}-${radialSegments}-${heightSegments ?? 1}-${openEnded ?? false}`;
+  let geom = geometryCache.get(key) as THREE.ConeGeometry;
+  if (!geom) {
+    geom = new THREE.ConeGeometry(r, h, radialSegments, heightSegments, openEnded);
+    geom.userData = { cached: true };
+    geometryCache.set(key, geom);
+  }
+  return geom;
+};
+
 const box = (name: string, size: [number, number, number], color: string, position: [number, number, number], options?: Parameters<typeof mat>[1]) => {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), mat(color, options));
+  const mesh = new THREE.Mesh(getBoxGeometry(...size), mat(color, options));
   mesh.name = name;
   mesh.position.set(...position);
   return mesh;
 };
 
 const cylinder = (name: string, radius: number, height: number, color: string, position: [number, number, number], options?: Parameters<typeof mat>[1]) => {
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 18), mat(color, options));
+  const mesh = new THREE.Mesh(getCylinderGeometry(radius, radius, height, 18), mat(color, options));
   mesh.name = name;
   mesh.position.set(...position);
   return mesh;
@@ -67,7 +114,7 @@ export const createArrow = (name: string, color: string, length: number) => {
   const group = new THREE.Group();
   group.name = name;
   const shaft = box(`${name}-shaft`, [0.12, 0.035, length], color, [0, 0.03, 0], { emissive: color, opacity: 0.72 });
-  const head = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.75, 3), mat(color, { emissive: color, opacity: 0.82 }));
+  const head = new THREE.Mesh(getConeGeometry(0.36, 0.75, 3), mat(color, { emissive: color, opacity: 0.82 }));
   head.rotation.x = Math.PI / 2;
   head.position.z = -length / 2 - 0.32;
   group.add(shaft, head);
@@ -105,7 +152,7 @@ export const OBJECT_LIBRARY = {
     g.add(topTruss);
 
     for (const x of [-0.36, -0.12, 0.12, 0.36]) {
-      const spot = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.75, 18), mat('#60a5fa', { emissive: '#2563eb' }));
+      const spot = new THREE.Mesh(getConeGeometry(0.22, 0.75, 18), mat('#60a5fa', { emissive: '#2563eb' }));
       spot.name = 'moving-head';
       spot.rotation.x = Math.PI;
       spot.position.set(w * x, trussHeight - 0.35, -d / 2 + 0.35);
@@ -174,7 +221,7 @@ export const OBJECT_LIBRARY = {
     const g = new THREE.Group();
     g.name = 'luz-evento';
     g.add(cylinder('light-body', 0.16 * s, 0.38 * s, '#111827', [0, 0, 0], { metalness: 0.5 }));
-    const beam = new THREE.Mesh(new THREE.ConeGeometry(0.45 * s, 2.3 * s, 24, 1, true), mat('#38bdf8', { opacity: 0.18, emissive: '#38bdf8' }));
+    const beam = new THREE.Mesh(getConeGeometry(0.45 * s, 2.3 * s, 24, 1, true), mat('#38bdf8', { opacity: 0.18, emissive: '#38bdf8' }));
     beam.name = 'light-beam';
     beam.rotation.x = Math.PI;
     beam.position.y = -1.1 * s;
@@ -204,7 +251,7 @@ export const OBJECT_LIBRARY = {
     g.name = 'planta-decorativa';
     g.add(cylinder('plant-pot', 0.22 * s, 0.42 * s, '#292524', [0, 0.2 * s, 0]));
     for (let i = 0; i < 7; i += 1) {
-      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.11 * s, 0.7 * s, 8), mat('#16a34a', { roughness: 0.9 }));
+      const leaf = new THREE.Mesh(getConeGeometry(0.11 * s, 0.7 * s, 8), mat('#16a34a', { roughness: 0.9 }));
       leaf.position.set(Math.cos(i) * 0.15 * s, 0.68 * s, Math.sin(i) * 0.15 * s);
       leaf.rotation.z = Math.cos(i) * 0.55;
       leaf.rotation.x = Math.sin(i) * 0.55;
