@@ -7,6 +7,7 @@ import type { EventBrief, EventWorldLayout } from '../types/event';
 import { resolveCameraCollision } from '../three/collisionSystem';
 import type { ImageWorldOptions, MeshQuality } from '../three/createImageWorld';
 import { createImageWorld } from '../three/createImageWorld';
+import { clearLibraryCache } from '../three/objectLibrary';
 
 interface Props {
   image: HTMLImageElement;
@@ -28,13 +29,19 @@ const downloadBlob = (blob: Blob, filename: string) => {
 const disposeScene = (scene: THREE.Scene) => {
   scene.traverse((object) => {
     if (object instanceof THREE.Mesh) {
-      object.geometry.dispose();
+      // Skip disposing cached geometries as their lifecycle is managed by clearLibraryCache
+      if (!object.geometry.userData?.cached) {
+        object.geometry.dispose();
+      }
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       materials.forEach((material) => {
+        // Dispose of texture maps on transient materials, but leave cached ones intact
         Object.values(material).forEach((value) => {
           if (value instanceof THREE.Texture) value.dispose();
         });
-        material.dispose();
+        if (!material.userData?.cached) {
+          material.dispose();
+        }
       });
     }
   });
@@ -244,6 +251,8 @@ export default function ThreeViewer({ image, depthData, imageReport, eventBrief,
       }
 
       disposeScene(scene);
+      // Clean up cached geometries and materials in the object library
+      clearLibraryCache();
       renderer.dispose();
       rendererRef.current = null;
       controlsRef.current = null;
