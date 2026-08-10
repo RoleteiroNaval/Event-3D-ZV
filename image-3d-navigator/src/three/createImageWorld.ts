@@ -34,18 +34,32 @@ const segmentMap: Record<MeshQuality, number> = {
   high: 256,
 };
 
+// Use a singleton 1x1 canvas to compute average color using hardware-accelerated downscaling.
+// This completely avoids any memory allocation (garbage collection overhead) and manual pixel loops.
+let singletonCanvas: HTMLCanvasElement | null = null;
+let singletonCtx: CanvasRenderingContext2D | null = null;
+
 const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (typeof document === 'undefined') {
+    return new THREE.Color(0x111111);
+  }
 
-  if (!ctx) return new THREE.Color(0x111111);
+  if (!singletonCanvas) {
+    singletonCanvas = document.createElement('canvas');
+    singletonCanvas.width = 1;
+    singletonCanvas.height = 1;
+    singletonCtx = singletonCanvas.getContext('2d', { willReadFrequently: true });
+  }
 
-  ctx.drawImage(
+  if (!singletonCtx) return new THREE.Color(0x111111);
+
+  // Use 'copy' composition to avoid any performance cost of clearing the canvas or alpha blending.
+  singletonCtx.globalCompositeOperation = 'copy';
+
+  singletonCtx.drawImage(
     image,
     region.x,
     region.y,
@@ -53,23 +67,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
+  const data = singletonCtx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const depthAt = (
