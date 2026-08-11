@@ -1,0 +1,3 @@
+## 2026-08-11 - Walkthrough Collision & Raycasting Object Pooling
+**Learning:** Instantiating `THREE.Box3` and `THREE.Vector3` on every single frame inside a requestAnimationFrame loop (like the camera walkthrough rendering loop and collision detection routines) triggers massive garbage collection cycles. By caching previous positions, raycaster direction vectors, and the collision footprint box as pre-allocated variables, we achieve zero object-allocation overhead during movement, leading to a much higher and stable FPS.
+**Action:** Always pre-allocate math and collision bounding volumes (like `Box3` and `Vector3`) outside animation loops and use in-place methods (`.copy`, `.set`, `.min.set`, etc.) instead of cloning or instantiating on every frame.
