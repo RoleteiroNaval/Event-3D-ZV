@@ -1,0 +1,3 @@
+## 2026-08-13 - [Three.js hot-path object allocation optimization]
+**Learning:** Frequent object allocations (such as Vector3 and Box3 instantiations or cloning camera position) inside the animation loop hot-path trigger constant garbage collection, causing micro-stutters and dropping frames. Pre-allocating reusable math structures at the module or effect scope completely removes GC thrashing.
+**Action:** Always pre-allocate THREE.Box3, THREE.Vector3, and other math/bound-checking objects outside animation loops and update their components in-place with `.set()` or `.copy()` rather than recreating them every frame.
