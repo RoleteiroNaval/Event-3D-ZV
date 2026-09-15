@@ -34,18 +34,28 @@ const segmentMap: Record<MeshQuality, number> = {
   high: 256,
 };
 
+// Singleton 1x1 canvas context for hardware-accelerated color averaging.
+// Downscaling the sub-region directly to 1x1 delegates spatial averaging to GPU/browser canvas interpolation,
+// eliminating repeated canvas allocations and manual pixel loops.
+let sharedColorCanvas: HTMLCanvasElement | null = null;
+let sharedColorCtx: CanvasRenderingContext2D | null = null;
+
 const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!sharedColorCanvas) {
+    sharedColorCanvas = document.createElement('canvas');
+    sharedColorCanvas.width = 1;
+    sharedColorCanvas.height = 1;
+    sharedColorCtx = sharedColorCanvas.getContext('2d', { willReadFrequently: true });
+  }
 
-  if (!ctx) return new THREE.Color(0x111111);
+  if (!sharedColorCtx) return new THREE.Color(0x111111);
 
-  ctx.drawImage(
+  // Use 'copy' mode to overwrite the 1x1 pixel without needing clearRect or re-allocation.
+  sharedColorCtx.globalCompositeOperation = 'copy';
+  sharedColorCtx.drawImage(
     image,
     region.x,
     region.y,
@@ -53,23 +63,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
+  const data = sharedColorCtx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const depthAt = (
