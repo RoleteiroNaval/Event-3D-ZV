@@ -10,6 +10,9 @@ export const createCollisionSystem = (
   obstacles: THREE.Box3[]
 ): CollisionSystem => ({ bounds, obstacles });
 
+// Pre-allocated Box3 to eliminate per-frame allocations during collision checks in animation loop
+const cameraFootprint = new THREE.Box3();
+
 export const resolveCameraCollision = (
   camera: THREE.PerspectiveCamera,
   previousPosition: THREE.Vector3,
@@ -19,12 +22,17 @@ export const resolveCameraCollision = (
   camera.position.x = Math.max(-system.bounds.halfWidth + margin, Math.min(system.bounds.halfWidth - margin, camera.position.x));
   camera.position.z = Math.max(-system.bounds.halfDepth + margin, Math.min(system.bounds.halfDepth - margin, camera.position.z));
 
-  const cameraFootprint = new THREE.Box3(
-    new THREE.Vector3(camera.position.x - 0.32, 0, camera.position.z - 0.32),
-    new THREE.Vector3(camera.position.x + 0.32, 1.9, camera.position.z + 0.32)
-  );
+  const cx = camera.position.x;
+  const cz = camera.position.z;
+  cameraFootprint.min.set(cx - 0.32, 0, cz - 0.32);
+  cameraFootprint.max.set(cx + 0.32, 1.9, cz + 0.32);
 
-  if (system.obstacles.some((box) => box.intersectsBox(cameraFootprint))) {
-    camera.position.copy(previousPosition);
+  // Use early-exiting loop over Array.some to prevent closure allocations per frame
+  const obstacles = system.obstacles;
+  for (let i = 0; i < obstacles.length; i++) {
+    if (obstacles[i].intersectsBox(cameraFootprint)) {
+      camera.position.copy(previousPosition);
+      break;
+    }
   }
 };
