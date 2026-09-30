@@ -1,0 +1,3 @@
+## 2026-09-30 - Zero-Allocation Collision System in Walkthrough Loop
+**Learning:** Instantiating `THREE.Box3` and `THREE.Vector3` in per-frame collision loops triggers garbage collection pauses and frame rate stuttering. Pre-allocating a module-level `THREE.Box3` and mutating its `.min` and `.max` properties via `.set()` eliminates per-frame heap allocations entirely. Combining this with a standard `for` loop instead of `Array.prototype.some()` removes closure allocations and allows immediate early termination upon collision.
+**Action:** Always pre-allocate math objects (Vector3, Box3, Matrix4, etc.) at module or hook level when called inside animation/render loops, and prefer direct `for` loops over higher-order array methods in hot paths.
