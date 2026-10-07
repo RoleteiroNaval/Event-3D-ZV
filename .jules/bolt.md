@@ -1,0 +1,3 @@
+## 2026-10-07 - Object Pooling for Three.js Collision & Animation Loops
+**Learning:** Instantiating `THREE.Box3` and `THREE.Vector3` objects inside 60FPS animation loops or per-frame collision checks creates significant Garbage Collection (GC) pressure and causes execution slowdowns (~10x overhead in micro-benchmarks). Using module-level pre-allocated objects updated via `.min.set()` / `.max.set()` and `.copy()` eliminates per-frame heap allocations entirely.
+**Action:** Always pre-allocate reusable Three.js vectors, matrices, and bounding boxes in module scope or hook setup when used in per-frame `requestAnimationFrame` loops or raycasting/collision routines.
