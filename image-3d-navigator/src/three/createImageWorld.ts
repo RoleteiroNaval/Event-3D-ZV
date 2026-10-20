@@ -34,18 +34,27 @@ const segmentMap: Record<MeshQuality, number> = {
   high: 256,
 };
 
+// Shared singleton offscreen canvas for O(1) regional color sampling via hardware downsampling
+let sharedCanvas: HTMLCanvasElement | null = null;
+let sharedCtx: CanvasRenderingContext2D | null = null;
+
 const sampleAverageColor = (
   image: HTMLImageElement,
   region: { x: number; y: number; width: number; height: number }
 ) => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 48;
-  canvas.height = 48;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (typeof document === 'undefined') return new THREE.Color(0x111111);
 
-  if (!ctx) return new THREE.Color(0x111111);
+  if (!sharedCanvas) {
+    sharedCanvas = document.createElement('canvas');
+    sharedCanvas.width = 1;
+    sharedCanvas.height = 1;
+    sharedCtx = sharedCanvas.getContext('2d', { willReadFrequently: true });
+  }
 
-  ctx.drawImage(
+  if (!sharedCtx) return new THREE.Color(0x111111);
+
+  sharedCtx.globalCompositeOperation = 'copy';
+  sharedCtx.drawImage(
     image,
     region.x,
     region.y,
@@ -53,35 +62,12 @@ const sampleAverageColor = (
     region.height,
     0,
     0,
-    canvas.width,
-    canvas.height
+    1,
+    1
   );
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  const count = data.length / 4;
-
-  for (let i = 0; i < data.length; i += 4) {
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-
-  return new THREE.Color(r / count / 255, g / count / 255, b / count / 255);
-};
-
-const depthAt = (
-  pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-  u: number,
-  v: number
-) => {
-  const x = Math.max(0, Math.min(width - 1, Math.floor(u * (width - 1))));
-  const y = Math.max(0, Math.min(height - 1, Math.floor(v * (height - 1))));
-  return pixels[(y * width + x) * 4] / 255;
+  const data = sharedCtx.getImageData(0, 0, 1, 1).data;
+  return new THREE.Color(data[0] / 255, data[1] / 255, data[2] / 255);
 };
 
 const createDepthMesh = (
@@ -96,17 +82,29 @@ const createDepthMesh = (
   const segments = segmentMap[options.quality];
   const geometry = new THREE.PlaneGeometry(worldWidth, worldHeight, segments, segments);
   const positions = geometry.attributes.position;
+  const posArray = positions.array as Float32Array;
   const depthPixels = depthData.data;
+  const depthWidth = depthData.width;
+  const depthHeight = depthData.height;
+  const maxDw = depthWidth - 1;
+  const maxDh = depthHeight - 1;
+  const depthScale = options.depthScale;
 
+  // Direct TypedArray access and inlined depth sampling to optimize up to 66k vertex iterations
   for (let i = 0; i < positions.count; i += 1) {
-    const x = positions.getX(i);
-    const y = positions.getY(i);
+    const idx = i * 3;
+    const x = posArray[idx];
+    const y = posArray[idx + 1];
     const u = x / worldWidth + 0.5;
     const v = 1 - (y / worldHeight + 0.5);
-    const depth = depthAt(depthPixels, depthData.width, depthData.height, u, v);
+
+    const px = u < 0 ? 0 : u > 1 ? maxDw : (u * maxDw) | 0;
+    const py = v < 0 ? 0 : v > 1 ? maxDh : (v * maxDh) | 0;
+    const depth = depthPixels[(py * depthWidth + px) * 4] / 255;
+
     const centeredDepth = 1 - depth;
     const edgeFade = Math.min(u, v, 1 - u, 1 - v) < 0.035 ? 0.68 : 1;
-    positions.setZ(i, -centeredDepth * options.depthScale * edgeFade);
+    posArray[idx + 2] = -centeredDepth * depthScale * edgeFade;
   }
 
   positions.needsUpdate = true;
