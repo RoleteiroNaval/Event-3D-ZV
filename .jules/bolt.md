@@ -1,0 +1,3 @@
+## 2026-11-08 - Depth Map Radial Computation Optimization
+**Learning:** In client-side 2D pixel processing pipelines like `createApproximateDepthMap`, computing `Math.hypot(x - centerX, y - centerY)` across millions of pixels (e.g. 2.07M pixels for 1080p) creates significant CPU overhead due to repeated trigonometric/hypot calculations and division.
+**Action:** Precompute 1D horizontal squared offsets `(x - centerX)^2` in a typed array `Float32Array(width)`, hoist row vertical terms out of the inner loop, and compute `Math.sqrt(dxSq[x] + dySq) * invMaxDistance` instead of `Math.hypot(...) / maxDistance`.
